@@ -3,109 +3,224 @@
 #include <TMRpcm.h>
 
   TMRpcm audio = TMRpcm();
-  LCD_Interface interface = LCD_Interface();
+  LCD_Interface lcd_interface = LCD_Interface();
 
-  int const AUDIO_CHIP_SELECT = 4, AUDIO_SPEAKER_PIN = 9, AUDIO_DEFAULT_VOLUME = 6;
+  int const AUDIO_CHIP_SELECT PROGMEM = 4;
+  int const AUDIO_SPEAKER_PIN PROGMEM = 9;
+  int const AUDIO_DEFAULT_VOLUME PROGMEM = 6;
 
   // If the slave arduino is sent this value, it knows that the following data is the command
-  char const SEND_SERIAL_ID = (char)58;
+  char const SEND_SERIAL_ID PROGMEM = (char)58;
   // If the slave arduino is sent this value, it knows that the entire command has been sent
-  char const SENT_SERIAL_ID = (char)59;
+  char const SENT_SERIAL_ID PROGMEM = (char)59;
 
-  namespace RGB
+  namespace RGB_CommandFiles
   {
-    int const num_of_files = 10; 
-
-    // RGB high variation animations
+    int const num_of_files PROGMEM = 4; 
     file* stripes = new file("Stripes");
     file* rainbow = new file("Rainbow");
-    file* custom = new file("Custom");
-    file* polarized = new file("Polarized");
-
-    // Monochromatic RGB animations
-    /*file* red = new file("Red");
-    file* green = new file("Green");
-    file* blue = new file("Blue");
-    file* yellow = new file("Yellow");
-    file* cyan = new file("Cyan");
-    file* violet = new file("Violet");*/
-
-    file* RGB_files[num_of_files] = 
-    {
-      polarized, stripes, rainbow, custom//, 
-      //red, green, blue, yellow, cyan, violet
-    }; 
+    file* secret = new file("Secret");
+    file* chaos = new file("Chaos");
+    file* RGB_command_file_ptrs[num_of_files] = {rainbow, stripes, secret, chaos}; 
 
     // Add animation file parameters
     void fileSetup()
     {
-      stripes->addParameter("Flow Rate", 10);
-      stripes->addParameter("Hue", 30);
-      stripes->addParameter("Brightness", 40); 
+      stripes->addParameter("Speed", 3);
+      stripes->addParameter("Prim Hue", 0); 
+      stripes->addParameter("Sec Hue", 0); 
+      stripes->addParameter("Mode", 0);
 
-      rainbow->addParameter("Flow Rate", 0);
+      rainbow->addParameter("Speed", 3);
+      rainbow->addParameter("Mode", 0);
 
-      custom->addParameter("Hue", 0);
-      custom->addParameter("Brightness", 0);
+      chaos->addParameter("Delay", 3);
 
-      polarized->addParameter("Flow Rate", 0);
-      polarized->addParameter("Prim Hue", 0);
-      polarized->addParameter("Brightness", 0);
-      polarized->addParameter("Sec Hue", 0);
-      polarized->addParameter("Brightness", 0);     
+      secret->addParameter("Speed", 3);
+      secret->addParameter("Mode", 0);
     }  
   }
   
-  namespace songs
+  namespace ArtistFiles
   {
     int const num_of_files = 3; 
-
-    file* fall_out_boy = new file("FallOutBoy");
-    file* imagine_dragons = new file("ImagineDragons");
-    file* avicii = new file("Avicii");
-
-    file* song_files[num_of_files] = {fall_out_boy, imagine_dragons, avicii};  
+    file* late_night = new file("Late Night");
+    file* lauren_daigle = new file("Lauren Daigle");;
+    file* misc = new file("Misc");
+    file* artist_file_ptrs[num_of_files] = {late_night, lauren_daigle, misc};  
 
     void fileSetup()
     {
-      fall_out_boy->addParameter("A~Song", 0);
-      imagine_dragons->addParameter("B~Song", 0);
-      avicii->addParameter("C~Song", 0);
+      late_night->addParameter("A", 0);
+      lauren_daigle->addParameter("B", 0);
+      misc->addParameter("C", 0);
     }
   }
 
-  // assume any folder not associated with "parent" is a child folder relative to its namespace
-  namespace lights_folder
+  // Assume any folder not associated with "parent" is a child folder relative to its namespace
+  namespace RGB_CommandsFolder
   {
-    folder* parent_folder = new folder("[] Lights");
+    folder* parent_folder_ptr = new folder("[] Lights");
 
     void folderSetup()
     {
-      parent_folder->addFiles(RGB::RGB_files, RGB::num_of_files);
+      parent_folder_ptr->addFiles(RGB_CommandFiles::RGB_command_file_ptrs, RGB_CommandFiles::num_of_files);
     }
   }
 
-  namespace music_folder
+  namespace ArtistsFolder
   {
-    folder* parent_folder = new folder("[] Music");
+    folder* parent_folder_ptr = new folder("[] Music");
 
     void folderSetup()
     {
-      parent_folder->addFiles(songs::song_files, songs::num_of_files);
+      parent_folder_ptr->addFiles(ArtistFiles::artist_file_ptrs, ArtistFiles::num_of_files);
     }
   }
   
-  namespace base_folder
+  namespace BaseFolder
   {
-    folder* parent_folder = new folder("**RBG Music**");
-    
-    int const num_of_child_folders = 2;
-    folder* child_folders[num_of_child_folders] = {lights_folder::parent_folder, music_folder::parent_folder};
+    folder* parent_folder_ptr = new folder("**RGB Music**");
+    int const num_of_child_folders PROGMEM = 2;
+    folder* child_folder_ptrs[num_of_child_folders] = {RGB_CommandsFolder::parent_folder_ptr, ArtistsFolder::parent_folder_ptr};
     
     void folderSetup()
     {
-      parent_folder->addFolders(child_folders, num_of_child_folders);
+      parent_folder_ptr->addFolders(child_folder_ptrs, num_of_child_folders);
     }
+  }
+
+  void sendSerialTransmission(char* transmission)
+  {
+    Serial.write(SEND_SERIAL_ID);
+    Serial.write(transmission);
+    Serial.write(SENT_SERIAL_ID);
+  }
+  
+  file null_file = file("off");
+  file* active_file_ptr = &null_file;
+  double active_file_params[4] = {}; 
+     
+  void runRGB_Commands()
+  {  
+    file* initial_file_ptr = active_file_ptr;
+    
+    for(int i = 0; i < RGB_CommandFiles::num_of_files; i++)
+    {
+      file* current_file_ptr = RGB_CommandFiles::RGB_command_file_ptrs[i];
+    
+      if(initial_file_ptr->getFileName() == null_file.getFileName() && current_file_ptr->getFileActive())
+      {
+        //transmit current_file
+        runSerialTransmission(current_file_ptr);
+        active_file_ptr = current_file_ptr;
+
+        for(int param_index = 0; param_index < current_file_ptr->getNumOfParameters(); param_index++)
+        {
+          active_file_params[param_index] = (current_file_ptr->getParameterPTR(param_index))->getData();
+        }
+        
+        break;
+      }
+      else if(initial_file_ptr->getFileName() != null_file.getFileName() && current_file_ptr->getFileName() == initial_file_ptr->getFileName() && 
+      !current_file_ptr->getFileActive())
+      {
+        //transmit null file
+        runSerialTransmission(&null_file);
+        active_file_ptr = &null_file;
+
+        for(int param_index = 0; param_index < current_file_ptr->getNumOfParameters(); param_index++)
+        {
+          active_file_params[param_index] = (current_file_ptr->getParameterPTR(param_index))->getData();
+        }
+        
+        break;
+      }
+      else if(initial_file_ptr->getFileName() != null_file.getFileName() && current_file_ptr->getFileName() != initial_file_ptr->getFileName() &&
+      current_file_ptr->getFileActive())
+      {
+        //transmit new active file
+        runSerialTransmission(current_file_ptr);
+        active_file_ptr->setFileActive(false);
+        active_file_ptr = current_file_ptr;
+
+        for(int param_index = 0; param_index < current_file_ptr->getNumOfParameters(); param_index++)
+        {
+          active_file_params[param_index] = (current_file_ptr->getParameterPTR(param_index))->getData();
+        }
+        
+        break;
+      }
+      else if(initial_file_ptr->getFileName() != null_file.getFileName() && current_file_ptr->getFileName() == initial_file_ptr->getFileName() &&
+      current_file_ptr->getFileActive() && updatedParameters(current_file_ptr, active_file_params))
+      {
+        //transmit active file with new parameters
+        runSerialTransmission(current_file_ptr);
+
+        for(int param_index = 0; param_index < current_file_ptr->getNumOfParameters(); param_index++)
+        {
+          active_file_params[param_index] = (current_file_ptr->getParameterPTR(param_index))->getData();
+        }
+
+        break;
+      }  
+    }
+  }
+
+// Both files passed in must have the same parameters in the same order!
+  bool updatedParameters(file* file_ptr, double expected_parameters[])
+  {
+    for(int i = 0; i < file_ptr->getNumOfParameters(); i++)
+    {
+      if((file_ptr->getParameterPTR(i))->getData() != expected_parameters[i])
+      {
+        return true;
+      }
+    }
+   
+    return false;
+  }
+
+  void runSerialTransmission(file* RGB_command_file_ptr)
+  {
+    if(RGB_command_file_ptr != nullptr)
+    {        
+      sendSerialTransmission(RGB_command_file_ptr->getFileName());
+      sendSerialTransmission(((String)RGB_command_file_ptr->getNumOfParameters()).c_str());
+        
+      for(int i = 0; i < RGB_command_file_ptr->getNumOfParameters(); i++)
+      {
+        sendSerialTransmission(((String)((RGB_command_file_ptr->getParameterPTR(i))->getData())).c_str());
+      } 
+    }
+  }
+ 
+  void runAudio()
+  {
+    static String current_audio_file_playing = "";
+    const String AUDIO_FILE_TYPE PROGMEM = ".wav";
+
+    for(int i = 0; i < ArtistFiles::num_of_files; i++)
+    {
+        String temp_audio_file = ArtistFiles::artist_file_ptrs[i]->getParameterPTR(0)->getParameterName() + 
+        (String)((int)(ArtistFiles::artist_file_ptrs[i]->getParameterPTR(0)->getData()));
+      
+        boolean temp_is_active = ArtistFiles::artist_file_ptrs[i]->getFileActive();
+      
+        if(current_audio_file_playing != temp_audio_file && temp_is_active)
+        {
+            audio.disable();
+            audio.play((temp_audio_file + AUDIO_FILE_TYPE).c_str());     
+            current_audio_file_playing = temp_audio_file;
+        
+            break;
+        }
+        else if(current_audio_file_playing == temp_audio_file && !temp_is_active)
+        {
+            audio.disable(); 
+            current_audio_file_playing = "";
+        }
+     }
   }
 
   void setup()
@@ -115,78 +230,17 @@
     SD.begin(AUDIO_CHIP_SELECT);
     audio.volume(AUDIO_DEFAULT_VOLUME);
   
-    RGB::fileSetup();
-    songs::fileSetup();
-    lights_folder::folderSetup();
-    music_folder::folderSetup();
-    base_folder::folderSetup();
-    interface.begin(base_folder::parent_folder);
+    RGB_CommandFiles::fileSetup();
+    ArtistFiles::fileSetup();
+    RGB_CommandsFolder::folderSetup();
+    ArtistsFolder::folderSetup();
+    BaseFolder::folderSetup();
+    lcd_interface.begin(BaseFolder::parent_folder_ptr);
   }
 
-  void sendSerialTransmission(char* transmission)
+  void loop()
   {
-    Serial.write(SEND_SERIAL_ID);
-    Serial.write(transmission);
-    Serial.write(SENT_SERIAL_ID);
+    lcd_interface.run();
+    runRGB_Commands(); 
+    runAudio();
   }
-
-  void RGB_Command(char* command)
-  {
-    for(int file_index = 0; file_index < lights_folder::parent_folder->getNumOfFiles(); file_index++)
-    {
-      file* current_file_ptr = lights_folder::parent_folder->getFilePTR(file_index);
-      
-      if(current_file_ptr->getFileName() == command && current_file_ptr->getFileActive())
-      {
-        sendSerialTransmission(command);
-        sendSerialTransmission(((String)current_file_ptr->getNumOfParameters()).c_str());
-
-        for(int i = 0; i < current_file_ptr->getNumOfParameters(); i++)
-        {
-          sendSerialTransmission(((String)(current_file_ptr->getParameterPTRs() + i)->getData()).c_str());
-        } 
-      }
-      else if(current_file_ptr->getFileName() != command && current_file_ptr->getFileActive())
-      {
-        current_file_ptr->setFileActive(false);
-      }
-    }
-  }
- 
-  void runAudio()
-  {
-    static String song_playing = "";
-    String FILE_TYPE = ".wav";
-
-    for(int i = 0; i < songs::num_of_files; i++)
-    {
-      String temp_song = music_folder::parent_folder->getFilePTR(i)->getParameterPTRs()->getParameterName() + (String)((int)(music_folder::parent_folder->getFilePTR(i)->getParameterPTRs()->getData()));
-      boolean temp_active = music_folder::parent_folder->getFilePTR(i)->getFileActive();
-      
-      if(song_playing != temp_song && temp_active)
-      {
-        audio.disable();
-        audio.play((temp_song + FILE_TYPE).c_str());     
-        song_playing = temp_song;
-        
-        Serial.println("SP: " + song_playing + FILE_TYPE);
-        break;
-      }
-      else if(song_playing == temp_song && !temp_active)
-      {
-        audio.disable(); 
-        song_playing = "";
-      }
-    }
-  }
-
-void loop()
-{
-   interface.interface(); 
-   runAudio();
-   
-   RGB_Command("Stripes");
-   RGB_Command("Rainbow");
-   RGB_Command("Custom");
-   RGB_Command("Polarized");
-}

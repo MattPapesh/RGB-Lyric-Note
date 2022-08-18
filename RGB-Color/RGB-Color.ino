@@ -6,10 +6,24 @@ Adafruit_PWMServoDriver RGB_DRIVER_2 = Adafruit_PWMServoDriver(0x41);
 int const max_duty_cycle = 30;
 int const max_driver_PWM_cycle = 4095;
 
+void setup()
+{
+  Serial.begin(9600);
+  
+  RGB_DRIVER_1.begin();
+  RGB_DRIVER_2.begin();
+  
+  RGB_DRIVER_1.setPWMFreq(200);
+  RGB_DRIVER_2.setPWMFreq(200);
+  
+  pinMode(A3, OUTPUT);
+  digitalWrite(A3, HIGH);
+}
+
 struct RGB_Pin
 {
   Adafruit_PWMServoDriver* pin_driver_PTR = nullptr;
-  int pin;
+  int pin = 0;
 
   RGB_Pin(Adafruit_PWMServoDriver* pin_driver_PTR, int pin)
   {
@@ -41,7 +55,7 @@ struct Cavity
 
 class Cavities
 {
-private: public:
+  private:
 
     Cavity** cavity_PTR_PTRs = nullptr;
     int num_of_cavities = 0;
@@ -67,7 +81,7 @@ private: public:
       }
 
       if ( (cavity_PTR->blue_pin_PTR)->pin_driver_PTR != nullptr)
-      {
+      { 
         ( (cavity_PTR->blue_pin_PTR)->pin_driver_PTR)->setPWM( (cavity_PTR->blue_pin_PTR)->pin, 0, ( (cavity_PTR->pct_blue) / 100) * max_driver_PWM_cycle);
       }
       else if ( (cavity_PTR->blue_pin_PTR)->pin_driver_PTR == nullptr)
@@ -81,8 +95,12 @@ private: public:
     Cavities(Cavity* cavity_PTRs[], int num_of_cavities)
     {
       cavity_PTR_PTRs = new Cavity*[num_of_cavities];
-      *cavity_PTR_PTRs = cavity_PTRs[0];
       this->num_of_cavities = num_of_cavities;
+
+      for (int i = 0; i < num_of_cavities; i++)
+      {
+          *(cavity_PTR_PTRs + i) = cavity_PTRs[i];
+      }
     }
 
     ~Cavities()
@@ -115,20 +133,6 @@ private: public:
     }
 };
 
-struct Hue
-{
-  float pct_red;
-  float pct_green;
-  float pct_blue;
-
-  Hue(float pct_red, float pct_green, float pct_blue)
-  {
-    this->pct_red = pct_red;
-    this->pct_green = pct_green;
-    this->pct_blue = pct_blue;
-  }
-};
-
 //Servo Driver #1 Pins
 RGB_Pin p0 = RGB_Pin(&RGB_DRIVER_1, 0); RGB_Pin p1 = RGB_Pin(&RGB_DRIVER_1, 1); RGB_Pin p2 = RGB_Pin(&RGB_DRIVER_1, 2);
 RGB_Pin p3 = RGB_Pin(&RGB_DRIVER_1, 3); RGB_Pin p4 = RGB_Pin(&RGB_DRIVER_1, 4); RGB_Pin p5 = RGB_Pin(&RGB_DRIVER_1, 5);
@@ -155,10 +159,7 @@ Cavity c6 = Cavity(&p18, &p19, &p20); Cavity c7 = Cavity(&p21, &p22, &p23); Cavi
 Cavity c9 = Cavity(&p27, &p28, &p29); Cavity c10 = Cavity(&p30, &p31, &p32); Cavity c11 = Cavity(&p33, &p34, &p35);
 
 Cavity* cavity_PTRs[12] = {&c0, &c1, &c2, &c3, &c4, &c5, &c6, &c7, &c8, &c9, &c10, &c11};
-Cavities lyricNote = Cavities(cavity_PTRs, 12);
-
-Hue red = Hue(100, 0, 0), purple = Hue(100, 0, 100), green = Hue(0, 100, 0), cyan = Hue(0, 100, 100), blue = Hue(0, 0, 100), yellow = Hue(100, 100, 0), orange = Hue(100, 15, 0);
-Hue hue[7] = {red, purple, green, cyan, blue, yellow, orange};
+Cavities lyric_note = Cavities(cavity_PTRs, 12);
 
 // If the slave arduino is sent this value, it knows that the following data is the command
 char const SEND_SERIAL_ID = (char)58;
@@ -167,20 +168,9 @@ char const SENT_SERIAL_ID = (char)59;
 
 namespace RGB_command
 {
-String command = "";
-int num_of_parameters = 0;
-int* parameter_ptrs = nullptr;
-}
-
-void setup()
-{
-  Serial.begin(9600);
-  RGB_DRIVER_1.begin();
-  RGB_DRIVER_2.begin();
-  RGB_DRIVER_1.setPWMFreq(200);
-  RGB_DRIVER_2.setPWMFreq(200);
-  pinMode(A3, OUTPUT);
-  digitalWrite(A3, HIGH);
+  String command = "";
+  int num_of_parameters = 0;
+  int* parameter_ptrs = nullptr;
 }
 
 bool transmit(char byte_sent)
@@ -254,8 +244,40 @@ void serialEvent()
   }
 }
 
-void loop()
+void runRainbow(double millis)
+{  int num = 5;
+  for(int red_pct = 0; red_pct < 100; red_pct++)
+  {
+    lyric_note.interfaceAllCavities(red_pct, 0, 0);
+    lyric_note.updateLyricNote();red_pct = red_pct + num;
+   // delay(millis / 400);
+  }
+
+  for(int green_pct = 0; green_pct < 100; green_pct++)
+  {
+    lyric_note.interfaceAllCavities(100 - green_pct, green_pct, 0);
+    lyric_note.updateLyricNote(); green_pct = green_pct + num;
+    //delay(millis / 400);
+  }
+
+  for(int blue_pct = 0; blue_pct < 100; blue_pct++)
+  { 
+    lyric_note.interfaceAllCavities(0, 100 - blue_pct, blue_pct);
+    lyric_note.updateLyricNote(); blue_pct = blue_pct + num;
+   // delay(millis / 400);
+  }
+
+  for(int blue_pct = 100; blue_pct >= 0; blue_pct--)
+  {
+    lyric_note.interfaceAllCavities(0, 0, 100 - blue_pct);
+    lyric_note.updateLyricNote(); blue_pct = blue_pct - num;
+    //delay(millis / 400);
+  }
+}
+
+bool ONCE = true;
+void loop() 
 {
-  delay(500);
+  runRainbow(3000);
 
 }
